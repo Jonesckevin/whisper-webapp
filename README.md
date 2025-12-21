@@ -11,9 +11,22 @@ AI-powered audio/video transcription using OpenAI Whisper with GPU acceleration.
 - **Docker Web:** `.\start-docker.ps1` → option 1 → http://localhost:8080
 - **Docker CLI:** `.\start-docker.ps1` → option 2 (batch processing)
 - **DockerHub:** 
-    ```powershell
-    docker run -e NVIDIA_VISIBLE_DEVICES=all -e CUDA_VISIBLE_DEVICES=0 -e FLASK_ENV=production -e MAX_UPLOAD_SIZE_GB=5 -e PRELOAD_WHISPER_MODELS=true -p 8080:5000 jonesckevin/whisper-webapp:latest`
-    ```
+    ```bash
+docker run -d \
+  --name whisper-webapp \
+  -p 8000:5000 \
+  -v "$(pwd)/data/uploads:/data/uploads" \
+  -v "$(pwd)/data/completed:/data/completed" \
+  -v "$(pwd)/data/models:/root/.cache/whisper" \
+  -e NVIDIA_VISIBLE_DEVICES=all \
+  -e CUDA_VISIBLE_DEVICES=0 \
+  -e FLASK_ENV=production \
+  -e MAX_UPLOAD_SIZE_GB=5 \
+  -e PRELOAD_WHISPER_MODELS=false \
+  --gpus '"device=0"' \
+  --restart unless-stopped \
+  jonesckevin/whisper-webapp:latest
+  ```
 
 ![Whisper WebApp Screenshot](images/Example0.png)
 ![Whisper WebApp Screenshot](images/Example1.png)
