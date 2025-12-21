@@ -15,6 +15,11 @@ AI-powered audio/video transcription using OpenAI Whisper with GPU acceleration.
     docker run -e NVIDIA_VISIBLE_DEVICES=all -e CUDA_VISIBLE_DEVICES=0 -e FLASK_ENV=production -e MAX_UPLOAD_SIZE_GB=5 -e PRELOAD_WHISPER_MODELS=true -p 8080:5000 jonesckevin/whisper-webapp:latest`
     ```
 
+![Whisper WebApp Screenshot](images/Example0.png)
+![Whisper WebApp Screenshot](images/Example1.png)
+![Whisper WebApp Screenshot](images/Example2.png)
+
+
 | Task | Command |
 |------|---------|
 | **Transcribe one file** | `python src/audio_to_text4.py video.mp4 --srt` |
