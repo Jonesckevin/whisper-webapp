@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Virtual Environments
+.venv/
+.venv_312
+
+# FFmpeg executable
+ff*.exe
+
+# Data directories (uploads, models, completed transcriptions)
+data/uploads/*
+!data/uploads/.gitkeep
+data/completed/*
+!data/completed/.gitkeep
+data/models/*
+!data/models/.gitkeep
+error.log

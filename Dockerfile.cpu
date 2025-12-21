@@ -1,0 +1,75 @@
+# Whisper Transcription Web App - Docker Image (CPU-Only)
+# Lightweight version without GPU support
+
+FROM ubuntu:24.04
+
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    python3.12 \
+    python3.12-venv \
+    python3-pip \
+    ffmpeg \
+    curl \
+    supervisor \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Create app directory
+WORKDIR /app
+
+# Create virtual environment
+RUN python3.12 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Upgrade pip
+RUN pip install --no-cache-dir --upgrade pip
+
+# Copy requirements first for better caching
+COPY src/requirements.txt /app/src/requirements.txt
+COPY app/requirements.txt /app/app/requirements.txt
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r /app/src/requirements.txt
+RUN pip install --no-cache-dir -r /app/app/requirements.txt
+
+# Install PyTorch CPU-only version (much smaller)
+RUN pip uninstall torch torchvision torchaudio -y 2>/dev/null || true && \
+    pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+# Copy application code
+COPY src/ /app/src/
+COPY app/ /app/app/
+
+# Copy supervisor config
+COPY config/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+# Copy entrypoint script
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Create data directories
+RUN mkdir -p /data/uploads /data/completed
+
+# Set permissions
+RUN chmod -R 755 /app /data
+
+# Clean up unnecessary files to reduce image size
+RUN find /opt/venv -type d -name "tests" -exec rm -rf {} + 2>/dev/null || true && \
+    find /opt/venv -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true && \
+    find /opt/venv -name "*.pyc" -delete && \
+    find /opt/venv -name "*.pyo" -delete
+
+# Expose Flask port
+EXPOSE 5000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:5000/api/health || exit 1
+
+# Use entrypoint script to handle model downloads and startup
+ENTRYPOINT ["/entrypoint.sh"]

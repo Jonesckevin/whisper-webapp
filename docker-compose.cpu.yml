@@ -1,0 +1,28 @@
+# Whisper Transcription Web App - Docker Compose (CPU-Only)
+# Lightweight version without GPU support
+
+services:
+  whisper-web-cpu:
+    build:
+      context: .
+      dockerfile: Dockerfile.cpu
+    container_name: whisper-webapp-cpu
+    ports:
+      - "8000:5000"
+    volumes:
+      # Mapped directories for external file access via network share
+      - ./data/uploads:/data/uploads
+      - ./data/completed:/data/completed
+      # Whisper models cache - persists models outside container
+      - ./data/models:/root/.cache/whisper
+    environment:
+      - FLASK_ENV=production
+      - MAX_UPLOAD_SIZE_GB=5
+      - PRELOAD_WHISPER_MODELS=false  # Set to 'true' to download all models on first run
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s

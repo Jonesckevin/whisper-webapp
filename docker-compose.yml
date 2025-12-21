@@ -1,0 +1,35 @@
+# Whisper Transcription Web App - Docker Compose
+# Multi-user web interface with GPU support
+
+services:
+  whisper-web:
+    build: .
+    container_name: whisper-webapp
+    ports:
+      - "8000:5000"
+    volumes:
+      # Mapped directories for external file access via network share
+      - ./data/uploads:/data/uploads
+      - ./data/completed:/data/completed
+      # Whisper models cache - persists models outside container
+      - ./data/models:/root/.cache/whisper
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CUDA_VISIBLE_DEVICES=0
+      - FLASK_ENV=production
+      - MAX_UPLOAD_SIZE_GB=5
+      - PRELOAD_WHISPER_MODELS=false  # Set to 'true' to download all models on first run
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s

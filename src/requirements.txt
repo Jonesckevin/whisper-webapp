@@ -1,0 +1,9 @@
+openai-whisper
+faster-whisper
+torch>=2.0.0
+torchvision
+torchaudio
+pydub
+SpeechRecognition
+moviepy
+ffmpeg-python

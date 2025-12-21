@@ -1,0 +1,31 @@
+# Whisper Transcription CLI Mode - Docker Compose
+# Single run batch processing with GPU support
+
+services:
+  whisper-cli:
+    build: .
+    container_name: whisper-cli
+    volumes:
+      - ./data/uploads:/data/uploads:ro
+      - ./data/completed:/data/completed
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CUDA_VISIBLE_DEVICES=0
+      - WHISPER_MODEL=${WHISPER_MODEL:-base}
+      - GENERATE_SRT=${GENERATE_SRT:-true}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    # Override the default supervisord command to run CLI directly
+    entrypoint: ["/opt/venv/bin/python"]
+    command: >
+      /app/src/audio_to_text4.py 
+      --transcribe-all 
+      --batch-model ${WHISPER_MODEL:-base}
+      ${GENERATE_SRT:+--srt}
+    working_dir: /data
+    restart: "no"

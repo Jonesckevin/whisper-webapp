@@ -1,0 +1,45 @@
+# Docker ignore file
+# Prevents unnecessary files from being copied into the Docker image
+
+# Git
+.git
+.gitignore
+.gitkeep
+
+# Virtual environments
+.venv*
+venv/
+.venv_312/
+
+__pycache__/
+*.pyc
+*.pyo
+
+# Data directories (these are mounted as volumes)
+data/
+holding/
+completed/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Documentation
+*.md
+!README.md
+
+# Windows scripts (not needed in container)
+*.bat
+*.ps1
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
