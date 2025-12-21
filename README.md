@@ -1,8 +1,14 @@
 # Whisper Transcription Tool
 
-AI-powered audio/video transcription using OpenAI Whisper with GPU acceleration. And it's a WebApp in Docker for all your HALp needs!
+<img src="./app/static/Whisper.png" alt="Whisper Logo" width="100" style="display:block; margin:auto;"/>
 
 [DockerHub - Jonesckevin](https://hub.docker.com/r/jonesckevin/whisper-webapp)
+
+AI-powered audio/video transcription using OpenAI Whisper with GPU acceleration. And it's a WebApp in Docker for all your HALp needs!
+
+![Whisper WebApp Screenshot](images/Example0.png)
+![Whisper WebApp Screenshot](images/Example1.png)
+![Whisper WebApp Screenshot](images/Example2.png)
 
 ## Quick Start
 
@@ -12,26 +18,21 @@ AI-powered audio/video transcription using OpenAI Whisper with GPU acceleration.
 - **Docker CLI:** `.\start-docker.ps1` → option 2 (batch processing)
 - **DockerHub:** 
     ```bash
-docker run -d \
-  --name whisper-webapp \
-  -p 8000:5000 \
-  -v "$(pwd)/data/uploads:/data/uploads" \
-  -v "$(pwd)/data/completed:/data/completed" \
-  -v "$(pwd)/data/models:/root/.cache/whisper" \
-  -e NVIDIA_VISIBLE_DEVICES=all \
-  -e CUDA_VISIBLE_DEVICES=0 \
-  -e FLASK_ENV=production \
-  -e MAX_UPLOAD_SIZE_GB=5 \
-  -e PRELOAD_WHISPER_MODELS=false \
-  --gpus '"device=0"' \
-  --restart unless-stopped \
-  jonesckevin/whisper-webapp:latest
+    docker run -d \
+      --name whisper-webapp \
+      -p 8000:5000 \
+      -v "$(pwd)/data/uploads:/data/uploads" \
+      -v "$(pwd)/data/completed:/data/completed" \
+      -v "$(pwd)/data/models:/root/.cache/whisper" \
+      -e NVIDIA_VISIBLE_DEVICES=all \
+      -e CUDA_VISIBLE_DEVICES=0 \
+      -e FLASK_ENV=production \
+      -e MAX_UPLOAD_SIZE_GB=5 \
+      -e PRELOAD_WHISPER_MODELS=false \
+      --gpus '"device=0"' \
+      --restart unless-stopped \
+      jonesckevin/whisper-webapp:latest
   ```
-
-![Whisper WebApp Screenshot](images/Example0.png)
-![Whisper WebApp Screenshot](images/Example1.png)
-![Whisper WebApp Screenshot](images/Example2.png)
-
 
 | Task | Command |
 |------|---------|
