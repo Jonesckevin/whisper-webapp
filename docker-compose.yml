@@ -6,7 +6,7 @@ services:
     build: .
     container_name: whisper-webapp
     ports:
-      - "8000:5000"
+      - "${WHISPERPORT:-8000}:5000"
     volumes:
       # Mapped directories for external file access via network share
       - ./data/uploads:/data/uploads
