@@ -8,7 +8,7 @@ services:
       dockerfile: Dockerfile.cpu
     container_name: whisper-webapp-cpu
     ports:
-      - "8000:5000"
+      - "${WHISPERPORT:-8000}:5000"
     volumes:
       # Mapped directories for external file access via network share
       - ./data/uploads:/data/uploads
