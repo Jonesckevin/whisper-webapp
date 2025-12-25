@@ -200,12 +200,16 @@ def process_job(job: dict):
         # Complete the job and store results in database
         db.complete_job(job_id, 'completed', transcript_text, srt_text)
         
-        # Clean up uploaded file after successful transcription
-        try:
-            input_path.unlink()
-            logger.info(f"🧹 Cleaned up upload file: {filename}")
-        except Exception as cleanup_error:
-            logger.warning(f"Failed to cleanup upload file: {cleanup_error}")
+        # Clean up uploaded file after successful transcription (unless keep_file is True)
+        keep_file = job.get('keep_file', False)
+        if not keep_file:
+            try:
+                input_path.unlink()
+                logger.info(f"🧹 Cleaned up upload file: {filename}")
+            except Exception as cleanup_error:
+                logger.warning(f"Failed to cleanup upload file: {cleanup_error}")
+        else:
+            logger.info(f"📁 Kept upload file: {filename}")
         
         logger.info(f"✅ Job completed: {job_id}")
         

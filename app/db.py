@@ -58,6 +58,7 @@ def init_database():
                 model TEXT NOT NULL,
                 language TEXT NOT NULL,
                 generate_srt BOOLEAN NOT NULL DEFAULT 0,
+                keep_file BOOLEAN NOT NULL DEFAULT 0,
                 status TEXT NOT NULL DEFAULT 'queued',
                 progress REAL DEFAULT 0.0,
                 progress_message TEXT DEFAULT '',
@@ -76,6 +77,13 @@ def init_database():
         conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_queue_position ON jobs(queue_position)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_completed_at ON jobs(completed_at)")
         
+        # Migration: Add keep_file column if it doesn't exist
+        # Check if column exists first
+        cursor = conn.execute("PRAGMA table_info(jobs)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if 'keep_file' not in columns:
+            conn.execute("ALTER TABLE jobs ADD COLUMN keep_file BOOLEAN NOT NULL DEFAULT 0")
+        
         # Logs table - application logs
         conn.execute("""
             CREATE TABLE IF NOT EXISTS logs (
@@ -92,10 +100,10 @@ def init_database():
 # Job Operations
 # =============================================================================
 
-def add_job(job_id: str, filename: str, model: str, language: str, generate_srt: bool) -> Dict:
+def add_job(job_id: str, filename: str, model: str, language: str, generate_srt: bool, keep_file: bool = False) -> Dict:
     """Add a new job to the queue."""
     with get_db() as conn:
-        # Get next queue position (max + 1, or 1 if empty)
+        # Get next queue position
         result = conn.execute(
             "SELECT COALESCE(MAX(queue_position), 0) + 1 as next_pos FROM jobs WHERE status = 'queued'"
         ).fetchone()
@@ -104,9 +112,9 @@ def add_job(job_id: str, filename: str, model: str, language: str, generate_srt:
         created_at = datetime.now().isoformat()
         
         conn.execute("""
-            INSERT INTO jobs (id, filename, model, language, generate_srt, status, queue_position, created_at)
-            VALUES (?, ?, ?, ?, ?, 'queued', ?, ?)
-        """, (job_id, filename, model, language, generate_srt, queue_position, created_at))
+            INSERT INTO jobs (id, filename, model, language, generate_srt, keep_file, status, queue_position, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, 'queued', ?, ?)
+        """, (job_id, filename, model, language, generate_srt, keep_file, queue_position, created_at))
         
         return get_job(job_id)
 

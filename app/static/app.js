@@ -432,6 +432,7 @@ document.getElementById('transcribe-form').addEventListener('submit', async (e) 
     const model = document.getElementById('model-select').value;
     const language = document.getElementById('language-input').value.trim() || 'en';
     const generateSrt = document.getElementById('srt-checkbox').checked;
+    const keepFile = document.getElementById('keep-file-checkbox').checked;
     
     if (!filename) {
         showToast('⚠️ Please select a file', 'warning');
@@ -446,7 +447,8 @@ document.getElementById('transcribe-form').addEventListener('submit', async (e) 
                 filename,
                 model,
                 language,
-                generate_srt: generateSrt
+                generate_srt: generateSrt,
+                keep_file: keepFile
             })
         });
         

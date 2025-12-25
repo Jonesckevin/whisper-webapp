@@ -405,6 +405,7 @@ def create_job():
     model = data.get('model', 'base')
     language = data.get('language', 'en')
     generate_srt = data.get('generate_srt', False)
+    keep_file = data.get('keep_file', False)
     
     if not filename:
         return jsonify({"error": "Filename is required"}), 400
@@ -423,7 +424,7 @@ def create_job():
         return jsonify({"error": f"Invalid model. Choose from: {', '.join(valid_models)}"}), 400
     
     # Add job to queue
-    job = job_queue.add(filename, model, language, generate_srt)
+    job = job_queue.add(filename, model, language, generate_srt, keep_file)
     
     db.add_log("INFO", f"Job created: {filename} (model: {model}, language: {language})")
     

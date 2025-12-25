@@ -38,6 +38,7 @@ class JobQueue:
         self._running = False
         self._job_processor: Optional[Callable] = None
         self._completion_callback: Optional[Callable] = None
+        self._startup_cleanup_done = False
         
     def set_processor(self, processor: Callable):
         """Set the function that processes jobs."""
@@ -52,6 +53,7 @@ class JobQueue:
         if self._running:
             return
         self._running = True
+        self._startup_cleanup_done = False  # Reset flag on start
         self._worker_thread = threading.Thread(target=self._worker_loop, daemon=True)
         self._worker_thread.start()
         
@@ -63,18 +65,20 @@ class JobQueue:
             
     def _worker_loop(self):
         """Main worker loop that processes jobs sequentially."""
-        while self._running:
-            # Check if there's already a running job (e.g., from restart)
+        # Check for interrupted jobs ONLY ONCE on startup
+        if not self._startup_cleanup_done:
+            self._startup_cleanup_done = True
             running_job = db.get_running_job()
             if running_job:
-                # Resume or fail the interrupted job
+                # Job was running when server stopped - mark as interrupted
                 db.complete_job(running_job['id'], error="Job interrupted by server restart")
                 if self._completion_callback:
                     try:
                         self._completion_callback(running_job, 'failed')
                     except Exception:
                         pass
-            
+        
+        while self._running:
             # Get next queued job
             job = db.get_next_queued_job()
             if job:
@@ -109,10 +113,10 @@ class JobQueue:
             except Exception:
                 pass  # Don't let callback errors break the queue
                     
-    def add(self, filename: str, model: str, language: str, generate_srt: bool) -> Dict:
+    def add(self, filename: str, model: str, language: str, generate_srt: bool, keep_file: bool = False) -> Dict:
         """Add a new job to the queue."""
         job_id = str(uuid.uuid4())[:8]
-        return db.add_job(job_id, filename, model, language, generate_srt)
+        return db.add_job(job_id, filename, model, language, generate_srt, keep_file)
         
     def get_all(self) -> Dict:
         """Get all jobs (current, queued, completed)."""
