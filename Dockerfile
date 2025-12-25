@@ -51,7 +51,7 @@ COPY app/ /app/app/
 COPY config/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 # Copy entrypoint script
-COPY entrypoint.sh /entrypoint.sh
+COPY app/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Create data directories
@@ -68,10 +68,6 @@ RUN find /opt/venv -type d -name "tests" -exec rm -rf {} + 2>/dev/null || true &
 
 # Expose Flask port
 EXPOSE 5000
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:5000/api/health || exit 1
 
 # Use entrypoint script to handle model downloads and startup
 ENTRYPOINT ["/entrypoint.sh"]

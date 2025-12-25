@@ -18,6 +18,18 @@
         <button class="tab-btn" data-tab="transcribe">🎤 Transcribe</button>
         <button class="tab-btn" data-tab="queue">📋 Queue</button>
         <button class="tab-btn" data-tab="results">📊 Results</button>
+        <button class="tab-btn" data-tab="logs">🗒️ Logs</button>
+        <div class="queue-stats" id="queue-stats">
+            <span class="stat-item" id="stat-queued">⏳ 0</span>
+            <span class="stat-item" id="stat-completed">✅ 0</span>
+            <span class="stat-item" id="stat-failed">❌ 0</span>
+        </div>
+        <button class="btn btn-secondary refresh-all-btn" onclick="refreshAll()" title="Refresh all data (R)">
+            🔄 Refresh
+        </button>
+        <button class="btn btn-danger refresh-all-btn" onclick="clearCompletedJobs()" title="Clear all completed jobs and results">
+            🗑️ Clear
+        </button>
     </nav>
 
     <main>
@@ -50,9 +62,6 @@
             <div class="card">
                 <div class="card-header">
                     <h2>📁 Uploaded Files</h2>
-                    <button class="btn btn-secondary" id="refresh-uploads-btn" title="Refresh file list">
-                        🔄 Refresh
-                    </button>
                 </div>
                 <div id="uploads-list" class="file-list">
                     <p class="loading">Loading...</p>
@@ -93,7 +102,7 @@
 
                     <div class="form-group checkbox-group">
                         <label>
-                            <input type="checkbox" id="srt-checkbox" checked>
+                            <input type="checkbox" id="srt-checkbox">
                             Generate SRT subtitles
                         </label>
                     </div>
@@ -106,45 +115,51 @@
 
             <div class="card">
                 <h3>📖 Model Information</h3>
-                <table class="model-info-table">
+                <table class="model-info-table" id="model-info-table">
                     <thead>
                         <tr>
                             <th>Model</th>
                             <th>VRAM</th>
                             <th>Speed</th>
                             <th>Quality</th>
+                            <th>Status</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="model-table-body">
                         <tr>
                             <td>Tiny</td>
                             <td>~1GB</td>
                             <td>⚡⚡⚡⚡⚡</td>
                             <td>⭐</td>
+                            <td><span class="model-status">⏳ Loading...</span></td>
                         </tr>
                         <tr class="recommended">
                             <td>Base ✓</td>
                             <td>~1.5GB</td>
                             <td>⚡⚡⚡⚡</td>
                             <td>⭐⭐</td>
+                            <td><span class="model-status">⏳ Loading...</span></td>
                         </tr>
                         <tr>
                             <td>Small</td>
                             <td>~2.5GB</td>
                             <td>⚡⚡⚡</td>
                             <td>⭐⭐⭐</td>
+                            <td><span class="model-status">⏳ Loading...</span></td>
                         </tr>
                         <tr>
                             <td>Medium</td>
                             <td>~4GB</td>
                             <td>⚡⚡</td>
                             <td>⭐⭐⭐⭐</td>
+                            <td><span class="model-status">⏳ Loading...</span></td>
                         </tr>
                         <tr>
                             <td>Large</td>
                             <td>~5.5GB</td>
                             <td>⚡</td>
                             <td>⭐⭐⭐⭐⭐</td>
+                            <td><span class="model-status">⏳ Loading...</span></td>
                         </tr>
                     </tbody>
                 </table>
@@ -153,22 +168,26 @@
 
         <!-- Queue Tab -->
         <section id="queue-tab" class="tab-content">
-            <div class="card">
-                <h2>⏳ Current Job</h2>
-                <div id="current-job">
-                    <p class="no-job">No job currently running</p>
+            <div class="queue-grid">
+                <div class="card">
+                    <h2>⏳ Current Job</h2>
+                    <div id="current-job">
+                        <p class="no-job">No job currently running</p>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>📋 Queued Jobs</h2>
+                    <div id="queued-jobs">
+                        <p class="no-jobs">No jobs in queue</p>
+                    </div>
                 </div>
             </div>
 
-            <div class="card">
-                <h2>📋 Queued Jobs</h2>
-                <div id="queued-jobs">
-                    <p class="no-jobs">No jobs in queue</p>
+            <div class="card completed-jobs-card">
+                <div class="card-header">
+                    <h2>✅ Recently Completed</h2>
                 </div>
-            </div>
-
-            <div class="card">
-                <h2>✅ Recently Completed</h2>
                 <div id="completed-jobs">
                     <p class="no-jobs">No completed jobs yet</p>
                 </div>
@@ -180,12 +199,27 @@
             <div class="card">
                 <div class="card-header">
                     <h2>📄 Transcripts & Subtitles</h2>
-                    <button class="btn btn-secondary" id="refresh-results-btn" title="Refresh file list">
-                        🔄 Refresh
-                    </button>
+                </div>
+                <div class="search-box">
+                    <input type="text" id="results-search" placeholder="🔍 Search by filename..." onkeyup="filterResults()">
                 </div>
                 <div id="results-list" class="file-list">
                     <p class="loading">Loading...</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Logs Tab -->
+        <section id="logs-tab" class="tab-content">
+            <div class="card">
+                <div class="card-header">
+                    <h2>🗒️ Application Logs</h2>
+                    <button class="btn btn-secondary" onclick="downloadLogs()" title="Download logs as text file">
+                        💾 Download
+                    </button>
+                </div>
+                <div id="logs-container" class="logs-viewer">
+                    <p class="no-jobs">No logs yet</p>
                 </div>
             </div>
         </section>
@@ -202,6 +236,7 @@
                 <pre id="modal-text"></pre>
             </div>
             <div class="modal-footer">
+                <button class="btn btn-secondary" id="modal-copy">📋 Copy</button>
                 <button class="btn btn-secondary" id="modal-download">⬇️ Download</button>
                 <button class="btn btn-primary" id="modal-close-btn">Close</button>
             </div>

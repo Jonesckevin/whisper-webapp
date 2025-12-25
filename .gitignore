@@ -9,11 +9,14 @@ __pycache__/
 # FFmpeg executable
 ff*.exe
 
-# Data directories (uploads, models, completed transcriptions)
+# SQLite database
+*.db
+*.db-*
+
+# Data directories (uploads, models, database)
 data/uploads/*
 !data/uploads/.gitkeep
-data/completed/*
-!data/completed/.gitkeep
 data/models/*
 !data/models/.gitkeep
+data/*.db
 error.log

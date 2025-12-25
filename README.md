@@ -17,22 +17,41 @@ AI-powered audio/video transcription using OpenAI Whisper with GPU acceleration.
 - **Docker Web:** `.\start-docker.ps1` → option 1 → http://localhost:8080
 - **Docker CLI:** `.\start-docker.ps1` → option 2 (batch processing)
 - **DockerHub:** 
-    ```bash
-    docker run -d \
-      --name whisper-webapp \
-      -p 8000:5000 \
-      -v "$(pwd)/data/uploads:/data/uploads" \
-      -v "$(pwd)/data/completed:/data/completed" \
-      -v "$(pwd)/data/models:/root/.cache/whisper" \
-      -e NVIDIA_VISIBLE_DEVICES=all \
-      -e CUDA_VISIBLE_DEVICES=0 \
-      -e FLASK_ENV=production \
-      -e MAX_UPLOAD_SIZE_GB=5 \
-      -e PRELOAD_WHISPER_MODELS=false \
-      --gpus '"device=0"' \
-      --restart unless-stopped \
-      jonesckevin/whisper-webapp:latest
-  ```
+```bash
+# CPU Version
+docker run -d \
+  --name whisper-webapp \
+  -p 8000:5000 \
+  -v "$(pwd)/data/uploads:/data/uploads" \
+  -v "$(pwd)/data:/data/db" \
+  -v "$(pwd)/data/models:/root/.cache/whisper" \
+  -e NVIDIA_VISIBLE_DEVICES=all \
+  -e CUDA_VISIBLE_DEVICES=0 \
+  -e FLASK_ENV=production \
+  -e MAX_UPLOAD_SIZE_GB=5 \
+  -e PRELOAD_WHISPER_MODELS=false \
+  --gpus '"device=0"' \
+  --restart unless-stopped \
+  jonesckevin/whisper-webapp:gpu
+```
+
+```bash
+# GPU Version
+docker run -d \
+  --name whisper-webapp \
+  -p 8000:5000 \
+  -v "$(pwd)/data/uploads:/data/uploads" \
+  -v "$(pwd)/data:/data/db" \
+  -v "$(pwd)/data/models:/root/.cache/whisper" \
+  -e NVIDIA_VISIBLE_DEVICES=all \
+  -e CUDA_VISIBLE_DEVICES=0 \
+  -e FLASK_ENV=production \
+  -e MAX_UPLOAD_SIZE_GB=5 \
+  -e PRELOAD_WHISPER_MODELS=false \
+  --gpus '"device=0"' \
+  --restart unless-stopped \
+  jonesckevin/whisper-webapp:gpu
+```
 
 | Task | Command |
 |------|---------|
@@ -52,12 +71,17 @@ AI-powered audio/video transcription using OpenAI Whisper with GPU acceleration.
 - 📤 **Upload:** Drag & drop files (max 5GB via web, unlimited via network share)
 - 📋 **Queue:** View pending jobs, reorder priority with ↑↓ arrows
 - 📊 **Progress:** Real-time transcription progress with percentage
-- 🔄 **Refresh:** Detect files added to `data/uploads/` via network share
-- 📁 **Results:** Download transcripts/SRT, view in browser, manual delete
+- 🔄 **Refresh:** Single unified refresh button updates all data
+- 📁 **Results:** View and download transcripts/SRT stored in database
+- 🗒️ **Logs:** View application logs (last 1000 entries)
 
-**Network Share Directories:**
-- `data/uploads/` - Input files (no size limit when copied directly)
-- `data/completed/` - Output transcripts and SRT files
+**Persistent Storage:**
+- `data/uploads/` - Input audio/video files
+- `data/sqlite.db` - SQLite database containing:
+  - Job queue (current, queued, completed jobs)
+  - Transcription results (transcript text and SRT)
+  - Application logs (last 1000 entries)
+- `data/models/` - Cached Whisper models
 
 ---
 
@@ -149,35 +173,6 @@ AI-powered audio/video transcription using OpenAI Whisper with GPU acceleration.
 **Audio:** MP3, WAV, FLAC, AAC, M4A, OGG, AMR  
 **Video:** MP4, AVI, MOV, MKV, FLV, WMV  
 **Output:** `.txt` transcripts with timestamps, `.srt` subtitles (optional)
-
----
-
-## Troubleshooting
-
-| Issue | Solution |
-|-------|----------|
-| **GPU not detected (Local)** | Run `.\run_whisper.ps1` and answer 'Y' when prompted to install PyTorch with CUDA |
-| **GPU not detected (Docker)** | Install nvidia-docker2: `sudo apt-get install nvidia-docker2 && sudo systemctl restart docker` |
-| **Large file upload fails** | Files >5GB must be copied to `data/uploads/` instead of web upload |
-| **Files not appearing in web UI** | Click 🔄 Refresh button to detect network share files |
-| **Out of VRAM** | Use smaller model or reduce GPU usage elsewhere |
-| **FFmpeg not found** | Local CLI auto-installs, Docker includes FFmpeg |
-
----
-
-## Directory Structure
-
-| Path | Purpose |
-|------|---------|
-| `run_whisper.ps1` | Local CLI launcher (Windows) |
-| `start-docker.ps1` | Docker launcher (Windows) |
-| `start-docker.sh` | Docker launcher (Linux/Mac) |
-| `src/audio_to_text4.py` | Main transcription script |
-| `app/` | Flask web application |
-| `data/uploads/` | Input files (network share accessible) |
-| `data/completed/` | Output transcripts and SRT files |
-| `holding/audio/` | Local CLI input directory |
-| `holding/video/` | Local CLI video input directory |
 
 ---
 

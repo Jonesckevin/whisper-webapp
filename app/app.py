@@ -6,7 +6,7 @@ Features:
 - Job queue management with priority reordering
 - Progress tracking with real-time updates
 - Manual file deletion
-- Refresh to detect externally added files
+- SQLite database for persistent storage
 """
 
 import os
@@ -17,9 +17,12 @@ from pathlib import Path
 from datetime import datetime
 from functools import wraps
 
-from flask import Flask, request, jsonify, render_template, send_file, abort
+from flask import Flask, request, jsonify, render_template, send_file, abort, Response
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
+
+# Import database module
+import db
 
 # Import job queue and worker
 from job_queue import job_queue, JobStatus
@@ -30,7 +33,6 @@ MAX_UPLOAD_SIZE_GB = int(os.environ.get('MAX_UPLOAD_SIZE_GB', 5))
 MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_GB * 1024 * 1024 * 1024
 
 UPLOAD_DIR = Path("/data/uploads")
-COMPLETED_DIR = Path("/data/completed")
 
 # Allowed file extensions
 ALLOWED_AUDIO_EXTENSIONS = {'mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a', 'amr', 'wma'}
@@ -117,32 +119,56 @@ def index():
                          max_upload_gb=MAX_UPLOAD_SIZE_GB)
 
 
-@app.route('/api/health')
-def health():
-    """Health check endpoint."""
-    return jsonify({
-        "status": "healthy",
-        "timestamp": datetime.now().isoformat()
-    })
-
-
 @app.route('/api/config')
 def get_config():
     """Get application configuration."""
     import torch
+    from pathlib import Path
     
     gpu_info = None
+    vram_usage = None
     if torch.cuda.is_available():
+        total_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+        allocated_memory = torch.cuda.memory_allocated(0) / (1024**3)
+        reserved_memory = torch.cuda.memory_reserved(0) / (1024**3)
+        
         gpu_info = {
             "name": torch.cuda.get_device_name(0),
-            "memory_gb": torch.cuda.get_device_properties(0).total_memory / (1024**3)
+            "memory_gb": total_memory
         }
+        
+        vram_usage = {
+            "total_gb": total_memory,
+            "allocated_gb": allocated_memory,
+            "reserved_gb": reserved_memory,
+            "free_gb": total_memory - reserved_memory
+        }
+    
+    # Check which Whisper models are downloaded
+    models_dir = Path.home() / '.cache' / 'whisper'
+    model_files = {
+        'tiny': 'tiny.pt',
+        'base': 'base.pt',
+        'small': 'small.pt',
+        'medium': 'medium.pt',
+        'large': 'large-v3.pt'  # Whisper uses large-v3 as default for 'large'
+    }
+    
+    downloaded_models = {}
+    if models_dir.exists():
+        for model_id, filename in model_files.items():
+            model_path = models_dir / filename
+            downloaded_models[model_id] = model_path.exists()
+    else:
+        downloaded_models = {model_id: False for model_id in model_files.keys()}
     
     return jsonify({
         "max_upload_size_gb": MAX_UPLOAD_SIZE_GB,
         "max_upload_size_bytes": MAX_UPLOAD_SIZE_BYTES,
         "gpu_available": torch.cuda.is_available(),
         "gpu_info": gpu_info,
+        "vram_usage": vram_usage,
+        "downloaded_models": downloaded_models,
         "whisper_models": [
             {"id": "tiny", "name": "Tiny", "vram": "~1GB", "speed": "fastest"},
             {"id": "base", "name": "Base", "vram": "~1.5GB", "speed": "fast"},
@@ -172,17 +198,8 @@ def list_files():
                     info['complete'] = is_file_complete(f)
                     uploads.append(info)
     
-    # List completed files
-    if COMPLETED_DIR.exists():
-        for f in COMPLETED_DIR.iterdir():
-            if f.is_file() and f.suffix.lower() in ['.txt', '.srt']:
-                info = get_file_info(f)
-                if info:
-                    completed.append(info)
-    
     return jsonify({
-        "uploads": sorted(uploads, key=lambda x: x['modified'], reverse=True),
-        "completed": sorted(completed, key=lambda x: x['modified'], reverse=True)
+        "uploads": sorted(uploads, key=lambda x: x['modified'], reverse=True)
     })
 
 
@@ -235,6 +252,8 @@ def upload_file():
         if not filepath.exists() or filepath.stat().st_size == 0:
             raise Exception("File save failed or file is empty")
         
+        add_log("SUCCESS", f"File uploaded: {filename} ({format_size(filepath.stat().st_size)})")
+        
         return jsonify({
             "success": True,
             "filename": filename,
@@ -246,6 +265,7 @@ def upload_file():
         # Clean up partial file
         if filepath.exists():
             filepath.unlink()
+        add_log("ERROR", f"File upload failed: {filename} - {str(e)}")
         return jsonify({"error": str(e)}), 500
         
     finally:
@@ -255,20 +275,15 @@ def upload_file():
 
 @app.route('/api/files/<path:filename>', methods=['DELETE'])
 def delete_file(filename):
-    """Delete a file from uploads or completed directory."""
+    """Delete a file from uploads directory."""
     filename = secure_filename(filename)
     
     # Check uploads directory
     upload_path = UPLOAD_DIR / filename
     if upload_path.exists():
         upload_path.unlink()
+        db.add_log("INFO", f"File deleted from uploads: {filename}")
         return jsonify({"success": True, "deleted": filename, "from": "uploads"})
-    
-    # Check completed directory
-    completed_path = COMPLETED_DIR / filename
-    if completed_path.exists():
-        completed_path.unlink()
-        return jsonify({"success": True, "deleted": filename, "from": "completed"})
     
     return jsonify({"error": "File not found"}), 404
 
@@ -278,42 +293,94 @@ def download_file(filename):
     """Download a file."""
     filename = secure_filename(filename)
     
-    # Check completed first, then uploads
-    for directory in [COMPLETED_DIR, UPLOAD_DIR]:
-        filepath = directory / filename
-        if filepath.exists():
-            return send_file(
-                str(filepath),
-                as_attachment=True,
-                download_name=filename
-            )
+    # Check uploads
+    filepath = UPLOAD_DIR / filename
+    if filepath.exists():
+        return send_file(
+            str(filepath),
+            as_attachment=True,
+            download_name=filename
+        )
     
     return jsonify({"error": "File not found"}), 404
 
 
 @app.route('/api/files/<path:filename>/view')
 def view_file(filename):
-    """View text file contents."""
-    filename = secure_filename(filename)
+    """View text file contents - now served from database."""
+    # This endpoint is kept for backwards compatibility but results are now in database
+    return jsonify({"error": "Results are now stored in database. Use /api/results endpoints."}), 400
+
+
+# ============================================================================
+# Results Routes (Database-backed)
+# ============================================================================
+
+@app.route('/api/results', methods=['GET'])
+def list_results():
+    """Get all transcription results from database."""
+    results = db.get_results()
+    return jsonify({"results": results})
+
+
+@app.route('/api/results/<job_id>/transcript')
+def get_transcript(job_id):
+    """Get transcript text for a specific job."""
+    transcript = db.get_transcript(job_id)
+    if transcript is None:
+        return jsonify({"error": "Transcript not found"}), 404
     
-    # Only allow viewing text files
-    if not filename.endswith(('.txt', '.srt')):
-        return jsonify({"error": "Only text files can be viewed"}), 400
+    job = db.get_job(job_id)
+    return jsonify({
+        "job_id": job_id,
+        "filename": job['filename'] if job else 'Unknown',
+        "content": transcript
+    })
+
+
+@app.route('/api/results/<job_id>/srt')
+def get_srt(job_id):
+    """Get SRT text for a specific job."""
+    srt = db.get_srt(job_id)
+    if srt is None:
+        return jsonify({"error": "SRT not found"}), 404
     
-    filepath = COMPLETED_DIR / filename
-    if not filepath.exists():
-        return jsonify({"error": "File not found"}), 404
+    job = db.get_job(job_id)
+    return jsonify({
+        "job_id": job_id,
+        "filename": job['filename'] if job else 'Unknown',
+        "content": srt
+    })
+
+
+@app.route('/api/results/<job_id>/download/<file_type>')
+def download_result(job_id, file_type):
+    """Download transcript or SRT as a file."""
+    job = db.get_job(job_id)
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
     
-    try:
-        with open(filepath, 'r', encoding='utf-8') as f:
-            content = f.read()
-        return jsonify({
-            "filename": filename,
-            "content": content,
-            "size": len(content)
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    if file_type == 'transcript':
+        content = db.get_transcript(job_id)
+        suffix = '.txt'
+    elif file_type == 'srt':
+        content = db.get_srt(job_id)
+        suffix = '.srt'
+    else:
+        return jsonify({"error": "Invalid file type"}), 400
+    
+    if content is None:
+        return jsonify({"error": f"{file_type} not found"}), 404
+    
+    # Create filename from original filename
+    base_name = Path(job['filename']).stem
+    download_name = f"{base_name}{suffix}"
+    
+    return Response(
+        content,
+        mimetype='text/plain',
+        headers={'Content-Disposition': f'attachment; filename="{download_name}"'}
+    )
 
 
 # ============================================================================
@@ -358,19 +425,21 @@ def create_job():
     # Add job to queue
     job = job_queue.add(filename, model, language, generate_srt)
     
+    db.add_log("INFO", f"Job created: {filename} (model: {model}, language: {language})")
+    
     return jsonify({
         "success": True,
-        "job": job.to_dict()
+        "job": job
     }), 201
 
 
 @app.route('/api/jobs/<job_id>', methods=['GET'])
-def get_job(job_id):
+def get_job_route(job_id):
     """Get a specific job by ID."""
     job = job_queue.get(job_id)
     if not job:
         return jsonify({"error": "Job not found"}), 404
-    return jsonify(job.to_dict())
+    return jsonify(job)
 
 
 @app.route('/api/jobs/<job_id>/move-up', methods=['PUT'])
@@ -391,10 +460,52 @@ def move_job_down(job_id):
 
 @app.route('/api/jobs/<job_id>', methods=['DELETE'])
 def cancel_job(job_id):
-    """Cancel a queued job."""
+    """Cancel a queued or running job."""
+    # Try to cancel queued job first
     if job_queue.cancel(job_id):
+        db.add_log("INFO", f"Job cancelled: {job_id}")
         return jsonify({"success": True, "cancelled": job_id})
-    return jsonify({"error": "Cannot cancel job (not found or already running)"}), 400
+    
+    # Check if it's a running job
+    running_job = db.get_running_job()
+    if running_job and running_job['id'] == job_id:
+        # Mark as cancelled in database
+        db.complete_job(job_id, 'cancelled', error="Cancelled by user")
+        db.add_log("WARNING", f"Running job cancelled: {job_id}")
+        return jsonify({"success": True, "cancelled": job_id, "was_running": True})
+    
+    return jsonify({"error": "Cannot cancel job (not found or already completed)"}), 400
+
+
+@app.route('/api/jobs/completed', methods=['DELETE'])
+def clear_completed_jobs():
+    """Clear all completed jobs from the queue."""
+    try:
+        count = job_queue.clear_completed()
+        db.add_log("INFO", f"Cleared {count} completed jobs")
+        return jsonify({"success": True, "cleared": count})
+    except Exception as e:
+        db.add_log("ERROR", f"Failed to clear completed jobs: {str(e)}")
+        return jsonify({"error": "Failed to clear completed jobs"}), 500
+
+
+@app.route('/api/jobs/<job_id>/delete', methods=['DELETE'])
+def delete_completed_job(job_id):
+    """Delete a specific completed job."""
+    try:
+        if db.delete_job(job_id):
+            db.add_log("INFO", f"Deleted job: {job_id}")
+            return jsonify({"success": True, "deleted": job_id})
+        return jsonify({"error": "Job not found or not completed"}), 404
+    except Exception as e:
+        db.add_log("ERROR", f"Failed to delete job {job_id}: {str(e)}")
+        return jsonify({"error": "Failed to delete job"}), 500
+
+
+@app.route('/api/logs', methods=['GET'])
+def get_logs():
+    """Get application logs from database."""
+    return jsonify(db.get_logs())
 
 
 # ============================================================================
@@ -426,28 +537,49 @@ def internal_error(error):
 # Application Startup
 # ============================================================================
 
+def job_completion_callback(job):
+    """Callback function called when a job completes."""
+    status = job.get('status', '')
+    filename = job.get('filename', 'Unknown')
+    model = job.get('model', 'Unknown')
+    error = job.get('error', '')
+    
+    if status == 'completed':
+        db.add_log("SUCCESS", f"Job completed: {filename} (model: {model})")
+    elif status == 'failed':
+        db.add_log("ERROR", f"Job failed: {filename} - {error}")
+    elif status == 'cancelled':
+        db.add_log("WARNING", f"Job cancelled: {filename}")
+
 def init_app():
     """Initialize the application."""
-    # Create directories
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    COMPLETED_DIR.mkdir(parents=True, exist_ok=True)
+    # Initialize database
+    db.init_database()
     
-    # Set up job processor and start queue
+    # Create upload directory
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    
+    # Set up job processor and completion callback
     job_queue.set_processor(process_job)
+    job_queue.set_completion_callback(job_completion_callback)
     job_queue.start()
+    
+    db.add_log("INFO", "Whisper Transcription Web App started")
     
     print("=" * 60)
     print("🎤 Whisper Transcription Web App")
     print("=" * 60)
     print(f"📁 Upload directory: {UPLOAD_DIR}")
-    print(f"📁 Completed directory: {COMPLETED_DIR}")
+    print(f"💾 Database: {db.DATABASE_PATH}")
     print(f"📦 Max upload size: {MAX_UPLOAD_SIZE_GB}GB")
     
     import torch
     if torch.cuda.is_available():
         print(f"🚀 GPU: {torch.cuda.get_device_name(0)}")
+        db.add_log("INFO", f"GPU detected: {torch.cuda.get_device_name(0)}")
     else:
         print("⚠️  No GPU detected, using CPU")
+        db.add_log("WARNING", "No GPU detected, using CPU")
     print("=" * 60)
 
 
