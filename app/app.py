@@ -252,7 +252,7 @@ def upload_file():
         if not filepath.exists() or filepath.stat().st_size == 0:
             raise Exception("File save failed or file is empty")
         
-        add_log("SUCCESS", f"File uploaded: {filename} ({format_size(filepath.stat().st_size)})")
+        db.add_log("SUCCESS", f"File uploaded: {filename} ({format_size(filepath.stat().st_size)})")
         
         return jsonify({
             "success": True,
@@ -265,7 +265,7 @@ def upload_file():
         # Clean up partial file
         if filepath.exists():
             filepath.unlink()
-        add_log("ERROR", f"File upload failed: {filename} - {str(e)}")
+        db.add_log("ERROR", f"File upload failed: {filename} - {str(e)}")
         return jsonify({"error": str(e)}), 500
         
     finally:
